@@ -1,0 +1,22 @@
+{
+    "name": "brians-brain-app",
+    "version": "1.0.0",
+    "description": "A simple Brian's Brain simulation",
+    "main": "script.js",
+    "scripts": {
+        "build": "tsc",
+        "start": "npm run build && http-server . -o",
+        "serve": "http-server . -o"
+    },
+    "keywords": [
+        "brian's brain",
+        "cellular automaton",
+        "typescript"
+    ],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "typescript": "^5.0.0",
+        "http-server": "^14.0.0"
+    }
+} 
