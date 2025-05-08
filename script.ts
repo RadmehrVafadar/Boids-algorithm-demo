@@ -85,6 +85,8 @@ class Boid {
     mouseRepulsionRadius: number;  // Radius for mouse repulsion
     size: number = 5; // Size of the boid triangle
     color: string; // Color of the boid
+    path: Vector[] = []; // Stores recent positions for path tracing
+    maxPathLength: number = 50; // Max length of the path tail
 
     constructor(x: number, y: number, initialMaxSpeed: number, color: string) {
         this.position = new Vector(x, y);
@@ -98,19 +100,24 @@ class Boid {
         this.color = color;
     }
 
-    // Method to keep boids within the screen bounds (wrapping)
+    // Method to keep boids within the screen bounds (bouncing)
     edges(width: number, height: number) {
-        if (this.position.x > width) {
-            this.position.x = 0;
+        const buffer = this.size * 2; // Buffer to prevent boids from getting stuck at the very edge
+
+        if (this.position.x > width - buffer) {
+            this.position.x = width - buffer;
+            this.velocity.x *= -1;
+        } else if (this.position.x < buffer) {
+            this.position.x = buffer;
+            this.velocity.x *= -1;
         }
-        if (this.position.x < 0) {
-            this.position.x = width;
-        }
-        if (this.position.y > height) {
-            this.position.y = 0;
-        }
-        if (this.position.y < 0) {
-            this.position.y = height;
+
+        if (this.position.y > height - buffer) {
+            this.position.y = height - buffer;
+            this.velocity.y *= -1;
+        } else if (this.position.y < buffer) {
+            this.position.y = buffer;
+            this.velocity.y *= -1;
         }
     }
 
@@ -230,7 +237,14 @@ class Boid {
         this.velocity.add(this.acceleration);
         this.velocity.limit(this.maxSpeed);
         this.position.add(this.velocity);
-        this.acceleration.mult(0); 
+        this.acceleration.mult(0);
+
+        // Add current position to path
+        this.path.push(new Vector(this.position.x, this.position.y));
+        // Limit path length
+        if (this.path.length > this.maxPathLength) {
+            this.path.shift(); // Remove the oldest position
+        }
     }
 
     draw(ctx: CanvasRenderingContext2D) {
@@ -240,14 +254,39 @@ class Boid {
         ctx.rotate(angle);
 
         ctx.beginPath();
-        ctx.moveTo(this.size * 2, 0); 
-        ctx.lineTo(-this.size, this.size); 
-        ctx.lineTo(-this.size, -this.size); 
+        ctx.moveTo(this.size * 2, 0);
+        ctx.lineTo(-this.size, this.size);
+        ctx.lineTo(-this.size, -this.size);
         ctx.closePath();
 
         ctx.fillStyle = this.color;
         ctx.fill();
         ctx.restore();
+    }
+
+    drawPath(ctx: CanvasRenderingContext2D) {
+        if (this.path.length < 2) return;
+
+        ctx.beginPath();
+        ctx.moveTo(this.path[0].x, this.path[0].y);
+        for (let i = 1; i < this.path.length; i++) {
+            ctx.lineTo(this.path[i].x, this.path[i].y);
+        }
+
+        // Create a gradient for the path to make it fade
+        const gradient = ctx.createLinearGradient(this.path[0].x, this.path[0].y, this.path[this.path.length - 1].x, this.path[this.path.length - 1].y);
+        
+        // Convert HEX color to RGBA for opacity control
+        let r = parseInt(this.color.slice(1, 3), 16);
+        let g = parseInt(this.color.slice(3, 5), 16);
+        let b = parseInt(this.color.slice(5, 7), 16);
+
+        gradient.addColorStop(0, `rgba(${r},${g},${b},0)`); // Fades out at the start of the tail
+        gradient.addColorStop(1, `rgba(${r},${g},${b},0.8)`); // More opaque near the boid
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = this.size / 2; // Adjust line width as needed
+        ctx.stroke();
     }
 }
 
@@ -262,6 +301,7 @@ const maxSpeedSlider = document.getElementById('maxSpeedSlider') as HTMLInputEle
 const maxSpeedValueDisplay = document.getElementById('maxSpeedValue') as HTMLSpanElement;
 const cursorForceSlider = document.getElementById('cursorForceSlider') as HTMLInputElement;
 const cursorForceValueDisplay = document.getElementById('cursorForceValue') as HTMLSpanElement;
+const pathTracingCheckbox = document.getElementById('pathTracingCheckbox') as HTMLInputElement; // New UI element
 
 // Define a palette of colors for the boid groups
 const boidColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FED766', '#2AB7CA'];
@@ -270,6 +310,7 @@ let flock: Boid[] = [];
 let numBoidsCurrent = parseInt(numBoidsSlider.value); // Initial value from slider
 let currentMaxSpeed = parseFloat(maxSpeedSlider.value); // Initial value from slider
 let currentCursorForce = parseFloat(cursorForceSlider.value);
+let pathTracingEnabled = false; // Global flag for path tracing
 
 // Mouse state
 let mousePosition: Vector | null = null;
@@ -290,6 +331,7 @@ function initializeSimulation() {
     if (numBoidsValueDisplay) numBoidsValueDisplay.textContent = numBoidsCurrent.toString();
     if (maxSpeedValueDisplay) maxSpeedValueDisplay.textContent = currentMaxSpeed.toFixed(1);
     if (cursorForceValueDisplay) cursorForceValueDisplay.textContent = currentCursorForce.toFixed(1);
+    if (pathTracingCheckbox) pathTracingEnabled = pathTracingCheckbox.checked; // Initialize based on checkbox
 }
 
 function setupEventListeners() {
@@ -330,6 +372,13 @@ function setupEventListeners() {
         // No need to update boids directly or re-initialize; force is applied in flock()
     });
 
+    // Checkbox listener for path tracing
+    if (pathTracingCheckbox) {
+        pathTracingCheckbox.addEventListener('change', (event) => {
+            pathTracingEnabled = (event.target as HTMLInputElement).checked;
+        });
+    }
+
     window.addEventListener('resize', handleResize);
 }
 
@@ -340,8 +389,11 @@ function gameLoop() {
 
     for (let boid of flock) {
         boid.edges(canvas.width, canvas.height);
-        boid.flock(flock, mousePosition, currentCursorForce); 
+        boid.flock(flock, mousePosition, currentCursorForce);
         boid.update();
+        if (pathTracingEnabled) {
+            boid.drawPath(ctx); // Draw path first so boid is on top
+        }
         boid.draw(ctx);
     }
 

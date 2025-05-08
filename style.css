@@ -5,7 +5,7 @@ html, body {
     height: 100%;
     width: 100%;
     font-family: sans-serif;
-    background-color: #f0f0f0; /* Will mostly be covered by canvas */
+    background-color: #000000; /* Will mostly be covered by canvas */
 }
 
 h1 {
@@ -22,7 +22,7 @@ h1 {
 canvas {
     display: block; /* Remove extra space below canvas */
     border: none; /* Remove border for full-screen */
-    background-color: #fff; /* Canvas background */
+    background-color: #000000; /* Canvas background */
     width: 100%;
     height: 100%;
 }
